@@ -14,7 +14,6 @@ int main(int argc, char** argv) {
   OMEGA_H_CHECK(argc == 3);
   Omega_h::Mesh mesh(&lib);
   Omega_h::binary::read(argv[1], lib.world(), &mesh);
-  auto dim = mesh.dim();
 
   using Ctrlr = Controller::KokkosController<MemorySpace, ExecutionSpace, double*>;
   Ctrlr c({mesh.nverts()});
@@ -26,7 +25,14 @@ int main(int argc, char** argv) {
     vtxDbls(i) = 42.1;
   };
 
-  mf.parallel_for({0,0},{10,10}, setVtx, "set_vertex");
+  mf.parallel_for({0},{mesh.nverts()}, setVtx, "set_vertex");
 
-  Omega_h::vtk::write_parallel(argv[2], &mesh, dim);
+  //CK
+  //use the dist to synchronize values across the vertices - the 'owner' of each
+  //vertex has its value become the value on the non-owning processes
+ 
+  //CWS 
+  //convert the meshfield to an omegah 'tag' for visualization
+
+  Omega_h::vtk::write_parallel(argv[2], &mesh, mesh.dim());
 }
