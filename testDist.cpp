@@ -30,8 +30,8 @@ int main(int argc, char** argv) {
   };
   mf.parallel_for({0},{mesh.nverts()}, setVtx, "set_vertex");
 
-  //CK
-  //use the dist to synchronize values across the vertices - the 'owner' of each
+  auto dist = mesh.ask_dist(0);
+  //TODO - use the dist to synchronize values across the vertices - the 'owner' of each
   //vertex has its value become the value on the non-owning processes
  
   //convert the meshfield to an omegah 'tag' for visualization
