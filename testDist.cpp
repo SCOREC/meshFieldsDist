@@ -11,6 +11,9 @@ using MemorySpace = ExecutionSpace::memory_space;
 
 int main(int argc, char** argv) {
   auto lib = Omega_h::Library(&argc, &argv);
+  if(argc!=3 && !lib.world()->rank()) {
+    fprintf(stderr, "Usage: %s <input mesh .osh> <output vtk .vtk>\n", argv[0]);
+  }
   OMEGA_H_CHECK(argc == 3);
   Omega_h::Mesh mesh(&lib);
   Omega_h::binary::read(argv[1], lib.world(), &mesh);
@@ -31,8 +34,15 @@ int main(int argc, char** argv) {
   //use the dist to synchronize values across the vertices - the 'owner' of each
   //vertex has its value become the value on the non-owning processes
  
-  //CWS 
   //convert the meshfield to an omegah 'tag' for visualization
+  Omega_h::Write<Omega_h::Real> vtxVals(mesh.nverts());
+  auto mfToOmegah = KOKKOS_LAMBDA (const int i) {
+    vtxVals[i] = vtxDbls(i);
+  };
+  mf.parallel_for({0},{mesh.nverts()}, mfToOmegah, "meshField_to_omegah");
+  mesh.add_tag(0, "fromMeshFieldDbl", 1, Omega_h::read(vtxVals));
 
+  //write vtk files
   Omega_h::vtk::write_parallel(argv[2], &mesh, mesh.dim());
+  return 0;
 }
