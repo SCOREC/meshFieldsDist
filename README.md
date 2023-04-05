@@ -29,7 +29,8 @@ function getname() {
 export kk=$root/`getname kokkos`/install
 export oh=$root/`getname omegah`/install
 export cab=$root/`getname cabana`/install
-CMAKE_PREFIX_PATH=$kk:$kk/lib64/cmake:$oh:$cab:$CMAKE_PREFIX_PATH
+export mf=$root/`getname meshFields`/install
+CMAKE_PREFIX_PATH=$kk:$kk/lib64/cmake:$oh:$cab:$mf:$CMAKE_PREFIX_PATH
 
 cm=`which cmake`
 echo "cmake: $cm"
@@ -39,7 +40,58 @@ echo "kokkos install dir: $kk"
 Create a file named `buildAll_turing.sh` with the following contents:
 
 ```
-asdjakdh
+#!/bin/bash -e
+
+#kokkos
+cd $root
+#tested with kokkos develop@9dff8cc
+git clone -b develop git@github.com:kokkos/kokkos.git
+cmake -S kokkos -B ${kk%%install} \
+  -DCMAKE_CXX_COMPILER=$root/kokkos/bin/nvcc_wrapper \
+  -DKokkos_ARCH_TURING75=ON \
+  -DKokkos_ENABLE_SERIAL=ON \
+  -DKokkos_ENABLE_OPENMP=off \
+  -DKokkos_ENABLE_CUDA=on \
+  -DKokkos_ENABLE_CUDA_LAMBDA=on \
+  -DKokkos_ENABLE_DEBUG=on \
+  -DCMAKE_INSTALL_PREFIX=$kk
+cmake --build ${kk%%install} -j8 --target install
+
+#omegah
+cd $root
+git clone git@github.com:SCOREC/omega_h.git
+cmake -S omega_h -B ${oh%%install} \
+  -DCMAKE_INSTALL_PREFIX=$oh \
+  -DBUILD_SHARED_LIBS=OFF \
+  -DOmega_h_USE_Kokkos=ON \
+  -DOmega_h_USE_CUDA=ON \
+  -DOmega_h_CUDA_ARCH=75 \
+  -DOmega_h_USE_MPI=ON  \
+  -DBUILD_TESTING=OFF \
+  -DCMAKE_CXX_COMPILER=mpicxx \
+  -DCMAKE_C_COMPILER=mpicc \
+  -DKokkos_PREFIX=$kk/lib64/cmake
+cmake --build ${oh%%install} -j8 --target install
+
+#cabana
+cd $root
+git clone git@github.com:ECP-copa/Cabana.git cabana
+cmake -S cabana -B ${cab%%install} \
+  -DCMAKE_BUILD_TYPE="Debug" \
+  -DCMAKE_CXX_COMPILER=$root/kokkos/bin/nvcc_wrapper \
+  -DCabana_ENABLE_MPI=OFF \
+  -DCabana_ENABLE_CAJITA=OFF \
+  -DCabana_ENABLE_TESTING=OFF \
+  -DCabana_ENABLE_EXAMPLES=OFF \
+  -DCabana_ENABLE_Cuda=ON \
+  -DCMAKE_INSTALL_PREFIX=$cab
+cmake --build ${cab%%install} -j8 --target install
+
+#meshfields
+cd $root
+git clone -b kokkosController git@github.com:SCOREC/meshFields
+cmake -S meshFields -B ${mf%%install} -DCMAKE_INSTALL_PREFIX=$mf
+cmake --build ${mf%%install} -j8 --target install
 ```
 
 Make the script executable:
@@ -59,15 +111,6 @@ Run the build script:
 
 ```
 ./buildAll_turing.sh
-```
-
-We need a branch of `meshFields` that is currently under development so we are going to run a different clone command then the one listed on the above wiki page:
-
-```
-cd $root
-git clone -b kokkosController git@github.com:SCOREC/meshFields
-cmake -S meshFields -B build-meshFields-cuda
-cmake --build build-meshFields-cuda 
 ```
 
 ## build meshFieldsDist
