@@ -22,7 +22,7 @@ int main(int argc, char** argv) {
   Ctrlr c({mesh.nverts()});
   MeshField::MeshField<Ctrlr> mf(c);
 
-  auto vtxRankId = mf.makeField<0>();
+  auto vtxRankId = c.makeSlice<0>();
 
   const int rank = lib.world()->rank();
   auto setVtx = KOKKOS_LAMBDA (const int i) {
@@ -30,19 +30,18 @@ int main(int argc, char** argv) {
   };
   mf.parallel_for({0},{mesh.nverts()}, setVtx, "set_vertex");
 
-  auto dist = mesh.ask_dist(0);
   //Use the dist to synchronize values across the vertices - the 'owner' of each
   //vertex has its value become the value on the non-owning processes 
-  
-  auto fieldPtr = vtxRankId.data(); //Has this been added yet?
-  auto fieldSize = mesh.nverts(); //Should be vtxRankId.size() -> but fine for this example
+  auto vtxView = vtxRankId.slice; 
+  auto fieldPtr = vtxView.data(); 
+  auto fieldSize = vtxView.size();
   
   Kokkos::View<int*, Kokkos::CudaSpace, Kokkos::MemoryUnmanaged>
   fieldData(fieldPtr, fieldSize);
 
-  Omega_h::Write fieldWrite(fieldData);
+  Omega_h::Write<Omega_h::LO> fieldWrite(fieldData);
   int width = 1;
-  auto syncFieldRead = mesh.sync_array(fieldSize, Omega_h::Read(fieldWrite), width);
+  auto syncFieldRead = mesh.sync_array(0, Omega_h::Read(fieldWrite), width);
  
   //TODO: replace meshField data with synced values
 
