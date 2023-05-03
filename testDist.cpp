@@ -3,6 +3,7 @@
 #include <Omega_h_mesh.hpp>
 #include <MeshField.hpp>
 #include <KokkosController.hpp>
+#include <span>
 
 #include <cstdlib>
 
@@ -30,31 +31,20 @@ int main(int argc, char** argv) {
   mf.parallel_for({0},{mesh.nverts()}, setVtx, "set_vertex");
 
   auto dist = mesh.ask_dist(0);
-  //TODO - use the dist to synchronize values across the vertices - the 'owner' of each
-  //vertex has its value become the value on the non-owning processes
+  //Use the dist to synchronize values across the vertices - the 'owner' of each
+  //vertex has its value become the value on the non-owning processes 
   
-  auto remote = mesh.ask_owners(0);
-  auto ranks = remote.ranks;
-  auto idxs = remote.idxs;
+  auto fieldPtr = vtxRankId.data(); //Has this been added yet?
+  auto fieldSize = mesh.nverts(); //Should be vtxRankId.size() -> but fine for this example
   
-  if(rank == 0){
-    std::cout << "Rank " << rank << " Remote Ranks: size - " << ranks.size() << std::endl;
-    std::cout << "Rank " << rank << "  Remote Idxs: size - " << idxs.size() << std::endl;
-    std::cout << "Rank " << rank << " Remote Ranks: data";
-    auto HostRanks = Omega_h::HostRead<Omega_h::I32>(ranks);
-    auto HostIdxs = Omega_h::HostRead<Omega_h::I32>(idxs);
+  Kokkos::View<int*, Kokkos::CudaSpace, Kokkos::MemoryUnmanaged>
+  fieldData(fieldPtr, fieldSize);
 
-    for(int i = 0; i < ranks.size(); ++i)
-      std::cout << " - (" << HostRanks[i] << ", " << HostIdxs[i] << ")";
-
-    std::cout << std::endl;
-  }
-
+  Omega_h::Write fieldWrite(fieldData);
   int width = 1;
-  auto data = Omega_h::Write<Omega_h::Real>(ranks.size(), rank, "");
-  auto recieved_data = dist.exch(Omega_h::Read<Omega_h::Real>(data), width);
-  
-
+  auto syncFieldRead = mesh.sync_array(fieldSize, Omega_h::Read(fieldWrite), width);
+ 
+  //TODO: replace meshField data with synced values
 
   //convert the meshfield to an omegah 'tag' for visualization
   Omega_h::Write<Omega_h::LO> vtxVals(mesh.nverts());
