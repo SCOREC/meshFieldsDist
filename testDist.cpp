@@ -45,15 +45,9 @@ int main(int argc, char** argv) {
  
   //TODO: replace meshField data with synced values
 
-  //convert the meshfield to an omegah 'tag' for visualization
-  Omega_h::Write<Omega_h::LO> vtxVals(mesh.nverts());
-  auto mfToOmegah = KOKKOS_LAMBDA (const int i) {
-    vtxVals[i] = vtxRankId(i);
-  };
-  mf.parallel_for({0},{mesh.nverts()}, mfToOmegah, "meshField_to_omegah");
-  mesh.add_tag(0, "fromMeshFieldInt", 1, Omega_h::read(vtxVals));
 
   //write vtk files
+  mesh.add_tag(0, "fromMeshFieldInt", 1, syncFieldRead);
   Omega_h::vtk::write_parallel(argv[2], &mesh, mesh.dim());
   return 0;
 }
