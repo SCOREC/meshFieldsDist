@@ -43,11 +43,21 @@ int main(int argc, char** argv) {
   int width = 1;
   auto syncFieldRead = mesh.sync_array(0, Omega_h::Read(fieldWrite), width);
  
-  //TODO: replace meshField data with synced values
+  //replace meshField data with synced values
+  auto updateVtx = KOKKOS_LAMBDA (const int i) {
+    vtxRankId(i) = syncFieldRead[i];
+  };
+  mf.parallel_for({0},{mesh.nverts()}, updateVtx, "set_vertex");
 
+  //convert the meshfield to an omegah 'tag' for visualization
+  Omega_h::Write<Omega_h::LO> vtxVals(mesh.nverts());
+  auto mfToOmegah = KOKKOS_LAMBDA (const int i) {
+    vtxVals[i] = vtxRankId(i);
+  };
+  mf.parallel_for({0},{mesh.nverts()}, mfToOmegah, "meshField_to_omegah");
+  mesh.add_tag(0, "fromMeshFieldInt", 1, Omega_h::read(vtxVals));
 
   //write vtk files
-  mesh.add_tag(0, "fromMeshFieldInt", 1, syncFieldRead);
   Omega_h::vtk::write_parallel(argv[2], &mesh, mesh.dim());
   return 0;
 }
