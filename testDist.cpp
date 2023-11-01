@@ -4,7 +4,7 @@
 #include <MeshField.hpp>
 #include <KokkosController.hpp>
 #include <span>
-
+#include <Kokkos_Core.hpp>
 #include <cstdlib>
 
 using ExecutionSpace = Kokkos::DefaultExecutionSpace;
@@ -49,6 +49,13 @@ int main(int argc, char** argv) {
   };
   mf.parallel_for({0},{mesh.nverts()}, updateVtx, "set_vertex");
 
+  //check the meshfield Data against the Omega_H ownership array
+  auto owners = mesh.ask_owners(0).ranks;
+  double error = 0;
+  Kokkos::parallel_reduce ("Reduction", mesh.nverts(), KOKKOS_LAMBDA (const int i, double& update) {
+	  update += abs(owners[i] - vtxRankId(i));
+  }, error);
+  OMEGA_H_CHECK(error == 0);
   //convert the meshfield to an omegah 'tag' for visualization
   Omega_h::Write<Omega_h::LO> vtxVals(mesh.nverts());
   auto mfToOmegah = KOKKOS_LAMBDA (const int i) {
