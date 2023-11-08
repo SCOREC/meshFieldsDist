@@ -36,7 +36,7 @@ int main(int argc, char** argv) {
   auto fieldPtr = vtxView.data(); 
   auto fieldSize = vtxView.size();
   
-  Kokkos::View<int*, Kokkos::CudaSpace, Kokkos::MemoryUnmanaged>
+  Kokkos::View<int*, MemorySpace, Kokkos::MemoryUnmanaged>
   fieldData(fieldPtr, fieldSize);
 
   Omega_h::Write<Omega_h::LO> fieldWrite(fieldData);
