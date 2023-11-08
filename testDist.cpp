@@ -3,7 +3,8 @@
 #include <Omega_h_mesh.hpp>
 #include <MeshField.hpp>
 #include <KokkosController.hpp>
-
+#include <span>
+#include <Kokkos_Core.hpp>
 #include <cstdlib>
 
 using ExecutionSpace = Kokkos::DefaultExecutionSpace;
@@ -17,12 +18,11 @@ int main(int argc, char** argv) {
   OMEGA_H_CHECK(argc == 3);
   Omega_h::Mesh mesh(&lib);
   Omega_h::binary::read(argv[1], lib.world(), &mesh);
-
   using Ctrlr = Controller::KokkosController<MemorySpace, ExecutionSpace, int*>;
   Ctrlr c({mesh.nverts()});
   MeshField::MeshField<Ctrlr> mf(c);
 
-  auto vtxRankId = mf.makeField<0>();
+  auto vtxRankId = c.makeSlice<0>();
 
   const int rank = lib.world()->rank();
   auto setVtx = KOKKOS_LAMBDA (const int i) {
@@ -30,10 +30,32 @@ int main(int argc, char** argv) {
   };
   mf.parallel_for({0},{mesh.nverts()}, setVtx, "set_vertex");
 
-  auto dist = mesh.ask_dist(0);
-  //TODO - use the dist to synchronize values across the vertices - the 'owner' of each
-  //vertex has its value become the value on the non-owning processes
+  //Use the dist to synchronize values across the vertices - the 'owner' of each
+  //vertex has its value become the value on the non-owning processes 
+  auto vtxView = vtxRankId.slice; 
+  auto fieldPtr = vtxView.data(); 
+  auto fieldSize = vtxView.size();
+  
+  Kokkos::View<int*, MemorySpace, Kokkos::MemoryUnmanaged>
+  fieldData(fieldPtr, fieldSize);
+
+  Omega_h::Write<Omega_h::LO> fieldWrite(fieldData);
+  int width = 1;
+  auto syncFieldRead = mesh.sync_array(0, Omega_h::Read(fieldWrite), width);
  
+  //replace meshField data with synced values
+  auto updateVtx = KOKKOS_LAMBDA (const int i) {
+    vtxRankId(i) = syncFieldRead[i];
+  };
+  mf.parallel_for({0},{mesh.nverts()}, updateVtx, "set_vertex");
+
+  //check the meshfield Data against the Omega_H ownership array
+  auto owners = mesh.ask_owners(0).ranks;
+  double error = 0;
+  Kokkos::parallel_reduce ("Reduction", mesh.nverts(), KOKKOS_LAMBDA (const int i, double& update) {
+	  update += abs(owners[i] - vtxRankId(i));
+  }, error);
+  OMEGA_H_CHECK(error == 0);
   //convert the meshfield to an omegah 'tag' for visualization
   Omega_h::Write<Omega_h::LO> vtxVals(mesh.nverts());
   auto mfToOmegah = KOKKOS_LAMBDA (const int i) {
