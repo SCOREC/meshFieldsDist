@@ -22,7 +22,7 @@ int main(int argc, char** argv) {
   Ctrlr c({mesh.nverts()});
   MeshField::MeshField<Ctrlr> mf(c);
 
-  auto vtxRankId = c.makeSlice<0>();
+  auto vtxRankId = mf.makeField<0>();
 
   const int rank = lib.world()->rank();
   auto setVtx = KOKKOS_LAMBDA (const int i) {
@@ -31,24 +31,12 @@ int main(int argc, char** argv) {
   mf.parallel_for({0},{mesh.nverts()}, setVtx, "set_vertex");
 
   //Use the dist to synchronize values across the vertices - the 'owner' of each
-  //vertex has its value become the value on the non-owning processes 
-  auto vtxView = vtxRankId.slice; 
-  auto fieldPtr = vtxView.data(); 
-  auto fieldSize = vtxView.size();
-  
-  Kokkos::View<int*, MemorySpace, Kokkos::MemoryUnmanaged>
-  fieldData(fieldPtr, fieldSize);
-
-  Omega_h::Write<Omega_h::LO> fieldWrite(fieldData);
+  Omega_h::Write<Omega_h::LO> fieldWrite(vtxRankId.serialize());
   int width = 1;
   auto syncFieldRead = mesh.sync_array(0, Omega_h::Read(fieldWrite), width);
  
   //replace meshField data with synced values
-  auto updateVtx = KOKKOS_LAMBDA (const int i) {
-    vtxRankId(i) = syncFieldRead[i];
-  };
-  mf.parallel_for({0},{mesh.nverts()}, updateVtx, "set_vertex");
-
+	vtxRankId.deserialize(syncFieldRead.view());
   //check the meshfield Data against the Omega_H ownership array
   auto owners = mesh.ask_owners(0).ranks;
   double error = 0;
