@@ -22,11 +22,14 @@ message(STATUS "IS_TESTING: ${IS_TESTING}")
 add_executable(testDist testDist.cpp)
 target_link_libraries(testDist PRIVATE meshFields::meshFields Omega_h::omega_h)
 
+add_executable(syncRankTwo syncRankTwo.cpp)
+target_link_libraries(syncRankTwo PRIVATE meshFields::meshFields Omega_h::omega_h)
 add_executable(syncRankThree syncRankThree.cpp)
 target_link_libraries(syncRankThree PRIVATE meshFields::meshFields Omega_h::omega_h)
 
 add_test(testDist_plate_2p mpirun -np 2 ./testDist ${CMAKE_SOURCE_DIR}/testMeshes/tri8_2p.osh tri2p.vtk)
 add_test(testDist_plate_4p mpirun -np 4 ./testDist ${CMAKE_SOURCE_DIR}/testMeshes/tri8_4p.osh tri4p.vtk)
+add_test(syncRankTwo mpirun -np 4 ./syncRankThree ${CMAKE_SOURCE_DIR}/testMeshes/tri8_4p.osh tri4p.vtk)
 add_test(syncRankThree mpirun -np 4 ./syncRankThree ${CMAKE_SOURCE_DIR}/testMeshes/tri8_4p.osh tri4p.vtk)
 
 

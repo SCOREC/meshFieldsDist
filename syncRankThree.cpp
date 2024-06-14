@@ -12,7 +12,6 @@ using ExecutionSpace = Kokkos::DefaultExecutionSpace;
 using MemorySpace = ExecutionSpace::memory_space;
 
 int main(int argc, char** argv) {
-  Kokkos::Timer kokkos_timer;
   auto lib = Omega_h::Library(&argc, &argv);
   if(argc!=3 && !lib.world()->rank()) {
     fprintf(stderr, "Usage: %s <input mesh .osh> <output vtk .vtk>\n", argv[0]);
@@ -22,6 +21,7 @@ int main(int argc, char** argv) {
   Omega_h::binary::read(argv[1], lib.world(), &mesh);
   using Ctrlr = Controller::KokkosController<MemorySpace, ExecutionSpace, int*, int**, int***>;
   Ctrlr c({mesh.nverts(), mesh.nverts(), 10, mesh.nverts(), 10, 10});
+  Kokkos::Timer timer;
   MeshField::MeshField<Ctrlr> mf(c);
 
   auto vtxRankId = mf.makeField<2>();
@@ -54,6 +54,7 @@ int main(int argc, char** argv) {
 	  update += abs(owners[i / 10 / 10] - vtxRankId(i / 10 / 10, i / 10 % 10, i % 10));
   }, error);
   OMEGA_H_CHECK(error == 0); 
+  std::cout << "Kokkos Timing Data: " << timer.seconds() << std::endl;
   //convert the meshfield to an omegah 'tag' for visualization
   Omega_h::Write<Omega_h::LO> vtxVals(mesh.nverts());
   auto mfToOmegah = KOKKOS_LAMBDA (const int i) {
@@ -64,6 +65,5 @@ int main(int argc, char** argv) {
 
   //write vtk files
   Omega_h::vtk::write_parallel(argv[2], &mesh, mesh.dim());
-  std::cout << "Total Run Time (s): " << kokkos_timer.seconds() << std::endl;
   return 0;
 }
