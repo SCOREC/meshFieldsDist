@@ -7,6 +7,7 @@
 #include <Kokkos_Core.hpp>
 #include <cstdlib>
 #include <Kokkos_Profiling_ProfileSection.hpp>
+#include <mpi.h>
 
 using ExecutionSpace = Kokkos::DefaultExecutionSpace;
 using MemorySpace = ExecutionSpace::memory_space;
@@ -40,7 +41,9 @@ int main(int argc, char** argv) {
   int width = 2;
   Kokkos::Profiling::popRegion();
   Kokkos::Profiling::pushRegion("meshField-sync");
+  MPI_Pcontrol(1);
   auto syncFieldRead = mesh.sync_array(0, Omega_h::Read(fieldWrite), width);
+  MPI_Pcontrol(0);
   Kokkos::Profiling::popRegion();
  
   //replace meshField data with synced values
