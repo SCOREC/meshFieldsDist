@@ -21,6 +21,8 @@ message(STATUS "IS_TESTING: ${IS_TESTING}")
 
 add_executable(testDist testDist.cpp)
 target_link_libraries(testDist PRIVATE meshFields::meshFields Omega_h::omega_h)
+add_executable(testSync testSync.cpp)
+target_link_libraries(testSync PRIVATE meshFields::meshFields Omega_h::omega_h)
 
 add_executable(syncRankTwo syncRankTwo.cpp)
 target_link_libraries(syncRankTwo PRIVATE meshFields::meshFields Omega_h::omega_h)
