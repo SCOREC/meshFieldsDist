@@ -33,7 +33,9 @@ int main(int argc, char** argv) {
     vtxRankId(i, 1) = rank;
   };
   mf.parallel_for({0},{mesh.nverts()}, setVtx, "set_vertex");
-
+  Kokkos::Profiling::pushRegion("testDist-Dist-Init");
+  mesh.ask_dist(0);
+  Kokkos::Profiling::popRegion();
   //Use the dist to synchronize values across the vertices - the 'owner' of each
   Kokkos::Profiling::pushRegion("meshField-Serialize");
   auto vtxRankIdView = vtxRankId.serialize();
