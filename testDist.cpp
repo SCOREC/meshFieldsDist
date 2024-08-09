@@ -8,9 +8,22 @@
 #include <cstdlib>
 #include <Kokkos_Profiling_ProfileSection.hpp>
 #include <mpi.h>
+#include <numeric>
 
 using ExecutionSpace = Kokkos::DefaultExecutionSpace;
 using MemorySpace = ExecutionSpace::memory_space;
+
+void getMinMaxAvg(MPI_Comm &comm, int worldSize, std::vector<double> &timing, double &avg, double &min, double &max) {
+  double tempSum = std::reduce(timing.begin(), timing.end());
+  double tempMin = *std::min_element(timing.begin(), timing.end());
+  double tempMax = *std::max_element(timing.begin(), timing.end());
+  double sum;
+  MPI_Allreduce(&tempSum, &sum, 1, MPI_DOUBLE, MPI_SUM, comm); 
+  MPI_Allreduce(&tempMin, &min, 1, MPI_DOUBLE, MPI_MIN, comm); 
+  MPI_Allreduce(&tempMax, &max, 1, MPI_DOUBLE, MPI_MAX, comm); 
+  
+  avg = sum / timing.size() / worldSize; 
+}
 
 int main(int argc, char** argv) {
   auto lib = Omega_h::Library(&argc, &argv);
@@ -52,61 +65,50 @@ int main(int argc, char** argv) {
   for(int i = 0; i < numRuns; ++i){
     serializeStartTime = timer.seconds();
     auto vtxRankIdView = vtxRankId.serialize();
-    serializeTimes.push_back(timer.seconds() - serializeStartTime);
     Kokkos::fence();
+    serializeTimes.push_back(timer.seconds() - serializeStartTime);
 
     Omega_h::Write<Omega_h::LO> fieldWrite(vtxRankIdView);
     int width = 2;
     syncStartTime = timer.seconds();
     auto syncFieldRead = mesh.sync_array(0, Omega_h::Read(fieldWrite), width);
-    syncTimes.push_back(timer.seconds() - syncStartTime);
     Kokkos::fence();
+    lib.world()->barrier();
+    syncTimes.push_back(timer.seconds() - syncStartTime);
  
     deserializeStartTime = timer.seconds();
 	  vtxRankId.deserialize(syncFieldRead.view());
-    deserializeTimes.push_back(timer.seconds() - deserializeStartTime);
     Kokkos::fence();
+    deserializeTimes.push_back(timer.seconds() - deserializeStartTime);
   }
 
-  double serializeSum = 0;
-  double deserializeSum = 0;
-  double syncSum = 0;
-  for(int i = 0; i < numRuns; ++i){
-    serializeSum += serializeTimes[i];
-    deserializeSum += deserializeTimes[i];
-    syncSum += syncTimes[i];
-  }
-  
-  double serializeAllSum, serializeAllMin, serializeAllMax;
-  double serializeMin = *std::min_element(serializeTimes.begin(), serializeTimes.end());
-  double serializeMax = *std::max_element(serializeTimes.begin(), serializeTimes.end());
-  MPI_Allreduce(&serializeSum, &serializeAllSum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD); 
-  MPI_Allreduce(&serializeMin, &serializeAllMin, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD); 
-  MPI_Allreduce(&serializeMax, &serializeAllMax, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD); 
-
-  double deserializeAllSum, deserializeAllMin, deserializeAllMax;
-  double deserializeMin = *std::min_element(deserializeTimes.begin(), deserializeTimes.end());
-  double deserializeMax = *std::max_element(deserializeTimes.begin(), deserializeTimes.end());
-  MPI_Allreduce(&deserializeSum, &deserializeAllSum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD); 
-  MPI_Allreduce(&deserializeMin, &deserializeAllMin, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD); 
-  MPI_Allreduce(&deserializeMax, &deserializeAllMax, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD); 
-
+/*
   double syncAllSum, syncAllMin, syncAllMax;
   double syncMin = *std::min_element(syncTimes.begin(), syncTimes.end());
   double syncMax = *std::max_element(syncTimes.begin(), syncTimes.end());
-  MPI_Allreduce(&syncSum, &syncAllSum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD); 
-  MPI_Allreduce(&syncMin, &syncAllMin, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD); 
-  MPI_Allreduce(&syncMax, &syncAllMax, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD); 
+  MPI_Allreduce(&syncSum, &syncAllSum, 1, MPI_DOUBLE, MPI_SUM, lib.world()->get_impl()); 
+  MPI_Allreduce(&syncMin, &syncAllMin, 1, MPI_DOUBLE, MPI_MIN, lib.world()->get_impl()); 
+  MPI_Allreduce(&syncMax, &syncAllMax, 1, MPI_DOUBLE, MPI_MAX, lib.world()->get_impl()); 
 
-  double syncAvg = syncAllSum / numRuns / 4;
-  double serializeAvg = serializeAllSum / numRuns / 4;
-  double deserializeAvg = deserializeAllSum / numRuns / 4;
-  
+  double syncAvg = syncAllSum / numRuns / lib.world()->size();
+  double serializeAvg = serializeAllSum / numRuns / lib.world()->size();
+  double deserializeAvg = deserializeAllSum / numRuns / lib.world()->size();
+*/  
+
+  double syncAllMin, syncAllMax, syncAvg;
+  double serializeAllMin, serializeAllMax, serializeAvg;
+  double deserializeAllMin, deserializeAllMax, deserializeAvg;
+  MPI_Comm comm = lib.world()->get_impl();
+  getMinMaxAvg(comm, lib.world()->size(), syncTimes, syncAvg, syncAllMin, syncAllMax);
+  getMinMaxAvg(comm, lib.world()->size(), serializeTimes, serializeAvg, serializeAllMin, serializeAllMax);
+  getMinMaxAvg(comm, lib.world()->size(), deserializeTimes, deserializeAvg, deserializeAllMin, deserializeAllMax);
+
+  if(lib.world()->rank() == 0) {
   std::cout << "computation, " << "sync, " << "serialize, " << "deserialize" << std::endl <<
                "min, " << syncAllMin << ", " << serializeAllMin << ", " << deserializeAllMin << std::endl <<
                "max, " << syncAllMax << ", " << serializeAllMax << ", " << deserializeAllMax << std::endl <<
                "avg, " << syncAvg << ", " << serializeAvg << ", " << deserializeAvg << std::endl;
-
+  }
   //check the meshfield Data against the Omega_H ownership array
   auto owners = mesh.ask_owners(0).ranks;
   double error = 0;
