@@ -53,6 +53,8 @@ int main(int argc, char** argv) {
   //std::cout << "ask_dist Kokkos Timer: " << ask_dist_timer.seconds() << std::endl;
   Kokkos::fence();
   
+  auto serializeArraySize = vtxRankId.getFlatViewSize(); 
+  Kokkos::View<int *> vtxRankIdView("serialized Field", serializeArraySize);
   std::vector<double> serializeTimes;
   double serializeStartTime = 0;
   std::vector<double> syncTimes;
@@ -64,7 +66,7 @@ int main(int argc, char** argv) {
   //Use the dist to synchronize values across the vertices - the 'owner' of each
   for(int i = 0; i < numRuns; ++i){
     serializeStartTime = timer.seconds();
-    auto vtxRankIdView = vtxRankId.serialize();
+    vtxRankId.serialize(vtxRankIdView);
     Kokkos::fence();
     serializeTimes.push_back(timer.seconds() - serializeStartTime);
 
