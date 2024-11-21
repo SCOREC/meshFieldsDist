@@ -1,6 +1,9 @@
 # meshFieldsDist
 testing integration of omegah and meshFields
 
+2024 performance testing report: https://scorec.rpi.edu/reports/view_report.php?id=772
+
+
 ## build instructions
 
 ## dependencies
